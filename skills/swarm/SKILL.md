@@ -372,9 +372,10 @@ A task is **complete** when ALL are met:
 
 ## Prerequisites
 
-This skill relies on **roach-pi's agentic-harness extension** for its agent dispatch system. Install it first:
+This skill relies on **pi-fork** for isolated child processes and **roach-pi's agentic-harness** for named agent dispatch. Install both:
 
 ```bash
+pi install git:github.com/elpapi42/pi-fork
 pi install git:github.com/tmdgusya/roach-pi
 ```
 
