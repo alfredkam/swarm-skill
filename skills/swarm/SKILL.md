@@ -115,9 +115,9 @@ Iteration 3: Reviewer finds K bugs → Coder fixes → Submit
   4. Update task tracking
 - **Output:** Committed changes, updated task status
 
-## GLM 5.1 Stuck Detection
+## Stuck Detection: Fork-Deep Hint
 
-When the coder is stuck on a problem for **5 turns** (attempts without progress), the orchestrator queries the **nano-gpt model GLM 5.1** for a hint on how to solve it.
+When the coder is stuck on a problem for **5 turns** (attempts without progress), the orchestrator forks a fresh child with `effort="deep"` to get an outside-perspective hint.
 
 ### What Counts as a Turn
 A "turn" is one full cycle of: coder attempts → gets feedback/error → tries again. Examples:
@@ -125,11 +125,12 @@ A "turn" is one full cycle of: coder attempts → gets feedback/error → tries 
 - Coder writes code → build fails on same line → coder adjusts → same error
 - Coder writes code → unit test fails on same assertion → coder adjusts → same failure
 
-### GLM 5.1 Hint Request
-When the coder hits 5 turns on the same blocking issue, the orchestrator sends a structured prompt to GLM 5.1:
+### Fork-Deep Hint Request
+When the coder hits 5 turns on the same blocking issue, the orchestrator forks a deep-reasoning child:
 
 ```
-You are GLM 5.1, a fast nano-gpt model. Give a concise hint to solve this stuck coder problem.
+fork(task="""
+The coder is stuck on this task. Give a SHORT hint (2-4 sentences).
 
 TASK: [Task ID] - [Description]
 SERVICE: [Service name]
@@ -141,24 +142,23 @@ CODE ATTEMPT 3: [What was tried]
 CODE ATTEMPT 4: [What was tried]
 CODE ATTEMPT 5: [What was tried]
 
-Give a SHORT HINT (2-4 sentences):
-- Root cause of the block
-- What to try next
+Root cause of the block and what to try next:
+""", effort="deep")
 ```
 
-### After Getting the GLM Hint
-1. Orchestrator passes the GLM 5.1 hint to the coder
+### After Getting the Hint
+1. Orchestrator passes the hint to the coder
 2. Coder applies the hint
 3. Reset turn counter to 0
 4. Continue normal review cycle
-5. If coder is still stuck after GLM hint → escalate to architect for re-planning
+5. If coder is still stuck → escalate to architect for re-planning
 
 ### Turn Counter Reset
 The 5-turn counter resets to 0 when:
 - The coder moves to a different file or AC item
 - The reviewer approves a fix
 - The architect re-plans the task
-- A GLM hint is applied
+- A fork-deep hint is applied
 
 ## Parallel Execution
 
@@ -341,7 +341,7 @@ Coder → QA: "Fixed: [test update]"
 | QA test failures | Coder fixes code or QA adjusts tests |
 | Pipeline timeout | Pause, resume, or escalate |
 | AC gap discovered late | Architect supplements AC, coder updates |
-| Coder stuck (5 turns) | Query nano-gpt model GLM 5.1 for hint → apply hint → retry |
+| Coder stuck (5 turns) | Fork-deep for outside-perspective hint → apply → retry |
 
 ## Progress Reporting Format
 
@@ -424,7 +424,7 @@ Orchestrator:
 6. **Parallel Limit:** Configurable (default 4). Go higher to burn more tokens, lower to conserve.
 7. **Task Priority:** Follow the priority graph (P0 → P1 → P2 → P3 → P4)
 8. **No Orphaned Code:** Every committed change has tests and review approval
-9. **GLM 5.1 Hint Fallback:** When the coder is stuck for 5 turns without progress, query nano-gpt model GLM 5.1 for a hint to unblock
+9. **Fork-Deep Hint:** When the coder is stuck for 5 turns without progress, fork a deep-reasoning child for an outside-perspective hint
 
 ## Files Affected Per Task
 
@@ -472,7 +472,6 @@ pipeline_phases:
   - commit
 stuck_detection:
   trigger: 5 turns without progress
-  fallback_model: "nano-gpt GLM 5.1"
-  action: query_model_for_hint → apply_hint → reset_counter
+  action: fork_deep_for_hint → apply_hint → reset_counter
   escalation: architect_replan_if_hint_fails
 ```
