@@ -1,12 +1,12 @@
 ---
 name: swarm
-description: Orchestrate parallel pipelines with planning, code & review using the fork tool (pi-fork). Each task flows through Architect → Coder → Reviewer → QA → Commit. Max 4 parallel pipelines for independent tasks. Use when you need to coordinate multi-agent task pipelines.
+description: Orchestrate parallel pipelines with planning, code & review using the fork tool (pi-fork). Each task flows through Architect → Coder → Reviewer → QA → Commit. Configurable parallel pipelines (default 4). Use when you need to coordinate multi-agent task pipelines.
 ---
 
 # Swarm Skill
 
 ## Overview
-Orchestrate parallel pipelines with planning, code & review using the fork tool (pi-fork). Each task flows through: **Architect → Coder → Reviewer → QA → Commit**. Maximum 4 parallel pipelines for independent tasks.
+Orchestrate parallel pipelines with planning, code & review using the fork tool (pi-fork). Each task flows through: **Architect → Coder → Reviewer → QA → Commit**. Configurable parallel pipelines (default 4).
 
 ## Roles
 
@@ -32,7 +32,7 @@ Orchestrate parallel pipelines with planning, code & review using the fork tool 
 │                        ↑        │                                  │
 │                        └── Fix Tests ───────────────────────────────┘  │
 │                                                                       │
-│  Max 4 parallel pipelines (independent tasks)                         │
+│  Configurable parallel pipelines (default 4)                         │
 └─────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -163,7 +163,7 @@ The 5-turn counter resets to 0 when:
 ## Parallel Execution
 
 ### Rules
-- **Maximum:** 4 concurrent pipelines
+- **Parallelism:** Configurable (default 4 concurrent pipelines). Set higher to burn more tokens, lower to conserve.
 - **Condition:** Tasks must be independent (different files, services, or repos)
 - **Priority:** Follow task priority graph (see below)
 
@@ -211,7 +211,7 @@ P4: Migration (GraphQL Migration)
 2. Sort by priority (P0 → P4)
 3. For each priority level:
    a. Find independent tasks (no file/service overlap)
-   b. Assign up to 4 independent tasks to parallel pipelines
+   b. Assign up to N independent tasks to parallel pipelines (default 4)
    c. Remaining tasks queue for sequential processing
 4. Advance to next priority level when current level is complete
 ```
@@ -414,7 +414,7 @@ Orchestrator:
 3. **Sequential Phases:** Each pipeline phase completes before next begins
 4. **Feedback Loops:** Review → Coder → Review cycles within each pipeline (max 3)
 5. **Quality Gates:** Each phase must pass before advancing
-6. **Parallel Limit:** Max 4 concurrent pipelines to maintain quality
+6. **Parallel Limit:** Configurable (default 4). Go higher to burn more tokens, lower to conserve.
 7. **Task Priority:** Follow the priority graph (P0 → P1 → P2 → P3 → P4)
 8. **No Orphaned Code:** Every committed change has tests and review approval
 9. **GLM 5.1 Hint Fallback:** When the coder is stuck for 5 turns without progress, query nano-gpt model GLM 5.1 for a hint to unblock
@@ -455,7 +455,7 @@ roles:
   - coder (worker)
   - reviewer (reviewer-bug, reviewer-security, reviewer-consistency)
   - qa-tester (reviewer-test-coverage)
-max_parallel: 4
+max_parallel: 4 (default, configurable)
 pipeline_phases:
   - architecture_with_ac_refinement
   - implementation
