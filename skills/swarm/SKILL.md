@@ -377,6 +377,7 @@ This skill relies on **pi-fork** for isolated child processes and **roach-pi's a
 ```bash
 pi install git:github.com/elpapi42/pi-fork
 pi install git:github.com/tmdgusya/roach-pi
+pi install npm:pi-observational-memory
 ```
 
 Pipeline roles map to named agents defined in roach-pi's `agents/` directory:
