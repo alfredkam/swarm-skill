@@ -1,0 +1,10 @@
+{
+  "name": "swarm-skill",
+  "version": "3.0.0",
+  "description": "Pi skill for orchestrating parallel multi-agent pipelines (Architect → Coder → Reviewer → QA → Commit)",
+  "keywords": ["pi-package", "pi-skill", "swarm", "multi-agent", "pipeline"],
+  "license": "MIT",
+  "pi": {
+    "skills": ["./skills"]
+  }
+}

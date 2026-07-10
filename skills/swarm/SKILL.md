@@ -1,0 +1,463 @@
+---
+name: swarm
+description: Orchestrate parallel pipelines with planning, code & review. Each task flows through Architect → Coder → Reviewer → QA → Commit. Max 4 parallel pipelines for independent tasks. Use when you need to coordinate multi-agent task pipelines.
+---
+
+# Swarm Skill
+
+## Overview
+Orchestrate parallel pipelines with planning, code & review. Each task flows through: **Architect → Coder → Reviewer → QA → Commit**. Maximum 4 parallel pipelines for independent tasks.
+
+## Roles
+
+| Role | Agent | Responsibility |
+|------|-------|----------------|
+| **Orchestrator** | Lead (you) | Task assignment, pipeline coordination, progress tracking, final commits |
+| **Solution Architect** | planner | Implementation planning, interface design, **AC refinement**. Runs with `effort="deep"`. |
+| **Coder** | worker | Code implementation based on architect's plan |
+| **Code Reviewer** | reviewer-bug, reviewer-security, reviewer-consistency | Code review, edge cases, logic errors, pushes back to coder. Runs with `effort="deep"`. |
+| **QA Tester** | reviewer-test-coverage | Unit test implementation, coverage verification |
+
+## Task Lifecycle
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                    Task Pipeline Flow                                   │
+│                                                                        │
+│  Task ──> Architect ──> Plan + AC Refinement ──> Coder ──> Code        │
+│                    ↑                                   │               │
+│                    └──────── Feedback Loop ────────────┘               │
+│                                                                       │
+│  Reviewed Code ──> QA ──> Tests ──> Pass ──> Commit ──> Done        │
+│                        ↑        │                                  │
+│                        └── Fix Tests ───────────────────────────────┘  │
+│                                                                       │
+│  Max 4 parallel pipelines (independent tasks)                         │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+## Pipeline Phases
+
+### Phase 1: Architecture & AC Refinement
+- **Input:** Task description, priority, affected files
+- **Agent:** planner (solution architect)
+- **Output:** Implementation plan with:
+  - File list to modify/create
+  - Interface contracts (API, data models)
+  - Dependencies and assumptions
+  - Test strategy
+  - **AC Refinement:** If acceptance criteria are missing or underspecified, the architect ADDS them directly into the task definition before planning. The architect supplements the original task with any missing AC items.
+- **Gate:** Plan must be approved before coding begins
+
+**AC Refinement Protocol:**
+1. Architect reviews the original task description
+2. Identifies gaps: missing edge cases, untested paths, unclear contracts
+3. Supplements the task with additional AC items
+4. Documents all AC items (original + supplemented)
+5. Passes refined task + plan to coder
+
+Example:
+```
+Original Task: "Add vehicle registration endpoint"
+Architect supplements:
+  + AC: Validate vehicle VIN format (17 chars, standard regex)
+  + AC: Tenant isolation (tenantId from auth context)
+  + AC: Idempotent POST (same VIN = 200 OK or 409 Conflict)
+  + AC: Return 201 Created with full vehicle object
+  + AC: Propagate to reporting-service via Pub/Sub
+```
+
+### Phase 2: Implementation
+- **Input:** Architect's plan with refined AC, current codebase state
+- **Agent:** worker (coder)
+- **Output:** Implemented code changes
+- **Process:**
+  - Read existing files
+  - Apply changes per plan
+  - Run initial build/lint checks
+  - Verify against all AC items (original + supplemented)
+
+### Phase 3: Code Review (Iterative)
+- **Input:** Coder's implementation
+- **Agent:** reviewer-bug (primary), reviewer-security, reviewer-consistency
+- **Effort:** `deep` (all review agents run with deep reasoning for thorough analysis)
+- **Process:**
+  1. Reviewer analyzes code for bugs, edge cases, consistency
+  2. If issues found → feedback to coder with specific fixes
+  3. Coder applies fixes
+  4. Repeat until reviewer approves (max 3 iterations)
+- **Output:** Reviewed and approved code
+
+**Review → Fix Cycle:**
+```
+Iteration 1: Reviewer finds N bugs → Coder fixes → Submit
+Iteration 2: Reviewer finds M bugs → Coder fixes → Submit
+Iteration 3: Reviewer finds K bugs → Coder fixes → Submit
+  → If still failing after 3 iterations → Escalate to architect
+```
+
+### Phase 4: QA Testing
+- **Input:** Reviewed code, test strategy from architect
+- **Agent:** reviewer-test-coverage (QA tester)
+- **Process:**
+  1. Implement unit tests covering all AC items
+  2. Run test suite
+  3. Verify coverage targets
+  4. If gaps found → QA writes more tests or flags gaps to coder
+- **Output:** Test suite with passing tests
+
+### Phase 5: Commit
+- **Agent:** Lead (orchestrator)
+- **Process:**
+  1. Final verification (build, lint, tests)
+  2. Stage changes
+  3. Commit with descriptive message referencing task ID
+  4. Update task tracking
+- **Output:** Committed changes, updated task status
+
+## GLM 5.1 Stuck Detection
+
+When the coder is stuck on a problem for **5 turns** (attempts without progress), the orchestrator queries the **nano-gpt model GLM 5.1** for a hint on how to solve it.
+
+### What Counts as a Turn
+A "turn" is one full cycle of: coder attempts → gets feedback/error → tries again. Examples:
+- Coder writes code → reviewer rejects with feedback → coder fixes → still wrong
+- Coder writes code → build fails on same line → coder adjusts → same error
+- Coder writes code → unit test fails on same assertion → coder adjusts → same failure
+
+### GLM 5.1 Hint Request
+When the coder hits 5 turns on the same blocking issue, the orchestrator sends a structured prompt to GLM 5.1:
+
+```
+You are GLM 5.1, a fast nano-gpt model. Give a concise hint to solve this stuck coder problem.
+
+TASK: [Task ID] - [Description]
+SERVICE: [Service name]
+BLOCKING ISSUE: [What's been tried 5 times]
+FILES: [Relevant files]
+CODE ATTEMPT 1: [What was tried]
+CODE ATTEMPT 2: [What was tried]
+CODE ATTEMPT 3: [What was tried]
+CODE ATTEMPT 4: [What was tried]
+CODE ATTEMPT 5: [What was tried]
+
+Give a SHORT HINT (2-4 sentences):
+- Root cause of the block
+- What to try next
+```
+
+### After Getting the GLM Hint
+1. Orchestrator passes the GLM 5.1 hint to the coder
+2. Coder applies the hint
+3. Reset turn counter to 0
+4. Continue normal review cycle
+5. If coder is still stuck after GLM hint → escalate to architect for re-planning
+
+### Turn Counter Reset
+The 5-turn counter resets to 0 when:
+- The coder moves to a different file or AC item
+- The reviewer approves a fix
+- The architect re-plans the task
+- A GLM hint is applied
+
+## Parallel Execution
+
+### Rules
+- **Maximum:** 4 concurrent pipelines
+- **Condition:** Tasks must be independent (different files, services, or repos)
+- **Priority:** Follow task priority graph (see below)
+
+### Independence Verification
+Before launching 2 parallel pipelines, verify:
+```
+Task A files: [list]
+Task B files: [list]
+Overlap? → No → Safe to parallelize
+Overlap? → Yes → Serialize or split files
+```
+
+### Parallelization Candidates by Service Type
+```
+Java Services (independent databases):
+  - billing-service, carrier-service, delivery-service
+  - driver-service, messaging-service, notification-service
+  - reporting-service, tracking-bridge-service
+
+Portals (independent Next.js apps):
+  - erp-client-portal, erp-carrier-portal, erp-internal-portal
+
+React Native Apps:
+  - erp-driver-app, erp-carrier-app
+```
+
+## Task Priority Graph
+
+### Priority Levels
+```
+P0: Foundation (Contract Fixtures & Visibility Rules)
+    ↓
+P1: Core Client (Client Contracts & Shipment Drilldown)
+    ↓
+P2: Internal Ops (Read Models & Dashboards)
+    ↓
+P3: Parity (Carrier/Driver Parity)
+    ↓
+P4: Migration (GraphQL Migration)
+```
+
+### Task Distribution Algorithm
+```
+1. Read task list with priority levels
+2. Sort by priority (P0 → P4)
+3. For each priority level:
+   a. Find independent tasks (no file/service overlap)
+   b. Assign up to 4 independent tasks to parallel pipelines
+   c. Remaining tasks queue for sequential processing
+4. Advance to next priority level when current level is complete
+```
+
+### Task Queue Format
+```
+Task Queue:
+┌──────────────────────────────────────────────────────────┐
+│ P0 (Foundation)                                         │
+│   [ ] IPD-1: Vehicle Registry - delivery-service       │
+│   [ ] IPB-1: Billing Setup - billing-service            │
+│   → Independent: Different services, different DBs      │
+│   → Action: Launch both in parallel                    │
+└──────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│ P1 (Core Client)                                         │
+│   [ ] ICP-1: Client Orders - erp-client-portal          │
+│   [ ] ICP-2: Shipment Drilldown - erp-client-portal     │
+│   → Dependent: Same portal, overlapping files           │
+│   → Action: Serialize (ICP-1 → ICP-2)                  │
+└──────────────────────────────────────────────────────────┘
+```
+
+## Execution Protocol
+
+### Starting a Pipeline
+
+When the user invokes `swarm [tasks]`, follow this exact flow:
+
+**Step 1: Parse Tasks**
+```
+User: "swarm IPD-13, IPD-14"
+→ Parse task IDs
+→ Resolve task descriptions
+→ Identify services/repos involved
+```
+
+**Step 2: Check Independence**
+```
+Task IPD-13: delivery-service/fleet/vehicle/
+Task IPD-14: delivery-service/fleet/availability/
+→ Same service, different modules
+→ Check file overlap
+→ If independent → parallelize, else → serialize
+```
+
+**Step 3: Launch Pipeline(s)**
+```
+Pipeline 1 (Task A):
+  1. subagent(planner, effort="deep") → Architecture + AC Refinement
+  2. subagent(worker) → Implementation
+  3. subagent(reviewer-bug, effort="deep") → Code Review
+  4. subagent(worker) → Apply Review Fixes
+  5. subagent(reviewer-test-coverage) → QA Tests
+  6. Orchestrator → Final Commit
+
+Pipeline 2 (Task B) — if independent:
+  Same flow, runs concurrently
+```
+
+### Pipeline Execution with Subagents
+
+```
+# Single pipeline (Task A)
+1. architect = subagent(planner, "Plan: [Task A description]. Refine AC. Output: plan.md", effort="deep")
+2. coder = subagent(worker, "Implement [Task A] per plan. Output: code changes")
+3. review1 = subagent(reviewer-bug, "Review [Task A] code. Find bugs, edge cases", effort="deep")
+4. if review1.findings:
+     fix1 = subagent(worker, "Fix review findings: [findings]")
+     review2 = subagent(reviewer-bug, "Re-review fixes", effort="deep")
+5. qa = subagent(reviewer-test-coverage, "Write tests for [Task A]. Cover all AC items")
+6. commit = orchestrator runs git commit
+
+# Parallel pipelines (Task A + Task B)
+pipeline_a = subagent(planner, "...", effort="deep") // architect phase
+pipeline_b = subagent(planner, "...", effort="deep") // architect phase
+# Then continue each pipeline sequentially
+```
+
+### Parallel Pipeline Orchestration
+
+For true parallelism across independent tasks:
+```
+# Phase 1: Parallel Architecture
+arch_A = subagent(planner, "Plan Task A", effort="deep")  // async
+arch_B = subagent(planner, "Plan Task B", effort="deep")  // async
+
+# Phase 2: Parallel Implementation (after both plans ready)
+code_A = subagent(worker, "Implement Task A per plan")
+code_B = subagent(worker, "Implement Task B per plan")
+
+# Phase 3: Parallel Review
+review_A = subagent(reviewer-bug, "Review Task A", effort="deep")
+review_B = subagent(reviewer-bug, "Review Task B", effort="deep")
+
+# Continue through QA and Commit in parallel
+```
+
+## Communication Protocol
+
+### Between Orchestrator and Architect
+```
+Orchestrator → Architect: "Plan implementation for [Task] in [Service]"
+Architect → Orchestrator: "Plan: [file list, contracts, AC refinement, dependencies]"
+```
+
+### Between Coder and Reviewer
+```
+Reviewer → Coder: "Fix: [specific issue] in [file] at [line] - [reason]"
+Coder → Reviewer: "Fixed: [change summary]"
+```
+
+### Between QA and Coder
+```
+QA → Coder: "Test gap: [test name] needs [coverage] - [missing assertion]"
+Coder → QA: "Fixed: [test update]"
+```
+
+## Error Handling
+
+| Error | Recovery |
+|-------|----------|
+| Architect plan rejected | Re-plan with feedback |
+| Coder build fails | Coder fixes build, re-submits |
+| Review finds blocker | Coder fixes, re-submits (max 3 iterations) |
+| QA test failures | Coder fixes code or QA adjusts tests |
+| Pipeline timeout | Pause, resume, or escalate |
+| AC gap discovered late | Architect supplements AC, coder updates |
+| Coder stuck (5 turns) | Query nano-gpt model GLM 5.1 for hint → apply hint → retry |
+
+## Progress Reporting Format
+
+```
+Pipeline Status:
+┌─────────────────────────────────────────────────────────┐
+│ Pipeline 1: [Task ID] - [Service]                    │
+│   Phase: Implementation (Phase 2/5)                   │
+│   Progress: Coder writing [file]                     │
+│   Status: In Progress                                 │
+│   AC Items: [N] original + [M] supplemented         │
+│                                                        │
+│ Pipeline 2: [Task ID] - [Service]                    │
+│   Phase: Code Review (Phase 3/5)                    │
+│   Progress: Reviewer analyzing [file]                │
+│   Status: Awaiting Coder fixes (Iteration 2/3)       │
+└─────────────────────────────────────────────────────────┘
+
+Completed Tasks: [List]
+Queued Tasks: [List]
+```
+
+## Success Criteria
+
+A task is **complete** when ALL are met:
+- [ ] Architect plan approved (including refined AC)
+- [ ] Coder implementation passes build/lint
+- [ ] Reviewer approves (max 3 review iterations)
+- [ ] QA tests pass covering all AC items
+- [ ] Orchestrator commits with descriptive message
+- [ ] Task status updated in tracking
+
+## Usage
+
+### Triggers
+```
+"swarm [task_id]"
+"swarm [task_1, task_2]"
+"run pipeline for [task] in [service]"
+"orchestrate [task_list]"
+```
+
+### Example Workflow
+```
+User: "swarm IPD-13, IPB-1"
+
+Orchestrator:
+1. Verify IPD-13 (delivery-service) and IPB-1 (billing-service) are independent
+2. Check task priority levels
+3. Start Pipeline 1: IPD-13
+   → Architect (planner): Plan + AC refinement
+   → Coder (worker): Implement
+   → Reviewer (reviewer-bug): Review + pushback loop
+   → QA (reviewer-test-coverage): Tests
+   → Commit
+4. Start Pipeline 2: IPB-1
+   → Same flow, parallel execution
+5. Track both pipelines
+6. Report completion status
+```
+
+## Key Principles
+
+1. **AC Refinement First:** Architect always supplements missing AC before coding begins
+2. **Independent Tasks Only:** Never run dependent tasks in parallel
+3. **Sequential Phases:** Each pipeline phase completes before next begins
+4. **Feedback Loops:** Review → Coder → Review cycles within each pipeline (max 3)
+5. **Quality Gates:** Each phase must pass before advancing
+6. **Parallel Limit:** Max 4 concurrent pipelines to maintain quality
+7. **Task Priority:** Follow the priority graph (P0 → P1 → P2 → P3 → P4)
+8. **No Orphaned Code:** Every committed change has tests and review approval
+9. **GLM 5.1 Hint Fallback:** When the coder is stuck for 5 turns without progress, query nano-gpt model GLM 5.1 for a hint to unblock
+
+## Files Affected Per Task
+
+Track which files each task modifies to ensure independence:
+
+```
+Task: [ID]
+Service: [service-name]
+Files:
+  - src/main/kotlin/com/erp/[service]/[File].kt
+  - src/test/kotlin/com/erp/[service]/[File]Test.kt
+  - schema/[service]/[migration].sql
+
+Dependency Check:
+  - Overlapping files with other active pipelines?
+  - Shared interfaces that might diverge?
+  - Common utilities being modified?
+```
+
+## Skill Metadata
+
+```yaml
+skill: swarm
+description: Orchestrate parallel pipelines with planning, code & review.
+version: 3.0
+triggers:
+  - "swarm"
+  - "run pipeline"
+  - "orchestrate tasks"
+roles:
+  - orchestrator (lead)
+  - architect (planner)
+  - coder (worker)
+  - reviewer (reviewer-bug, reviewer-security, reviewer-consistency)
+  - qa-tester (reviewer-test-coverage)
+max_parallel: 4
+pipeline_phases:
+  - architecture_with_ac_refinement
+  - implementation
+  - code_review_iterative
+  - qa_testing
+  - commit
+stuck_detection:
+  trigger: 5 turns without progress
+  fallback_model: "nano-gpt GLM 5.1"
+  action: query_model_for_hint → apply_hint → reset_counter
+  escalation: architect_replan_if_hint_fails
+```
