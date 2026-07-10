@@ -1,12 +1,12 @@
 ---
 name: swarm
-description: Orchestrate parallel pipelines with planning, code & review. Each task flows through Architect → Coder → Reviewer → QA → Commit. Max 4 parallel pipelines for independent tasks. Use when you need to coordinate multi-agent task pipelines.
+description: Orchestrate parallel pipelines with planning, code & review using the fork tool (pi-fork). Each task flows through Architect → Coder → Reviewer → QA → Commit. Max 4 parallel pipelines for independent tasks. Use when you need to coordinate multi-agent task pipelines.
 ---
 
 # Swarm Skill
 
 ## Overview
-Orchestrate parallel pipelines with planning, code & review. Each task flows through: **Architect → Coder → Reviewer → QA → Commit**. Maximum 4 parallel pipelines for independent tasks.
+Orchestrate parallel pipelines with planning, code & review using the fork tool (pi-fork). Each task flows through: **Architect → Coder → Reviewer → QA → Commit**. Maximum 4 parallel pipelines for independent tasks.
 
 ## Roles
 
@@ -261,34 +261,33 @@ Task IPD-14: delivery-service/fleet/availability/
 **Step 3: Launch Pipeline(s)**
 ```
 Pipeline 1 (Task A):
-  1. subagent(planner, effort="deep") → Architecture + AC Refinement
-  2. subagent(worker) → Implementation
-  3. subagent(reviewer-bug, effort="deep") → Code Review
-  4. subagent(worker) → Apply Review Fixes
-  5. subagent(reviewer-test-coverage) → QA Tests
+  1. fork(task="Plan + AC refinement", effort="deep") → Architecture + AC Refinement
+  2. fork(task="Implementation", effort="balanced") → Implementation
+  3. fork(task="Code review", effort="deep") → Code Review
+  4. fork(task="Apply review fixes", effort="balanced") → Apply Review Fixes
+  5. fork(task="QA tests", effort="balanced") → QA Tests
   6. Orchestrator → Final Commit
 
 Pipeline 2 (Task B) — if independent:
   Same flow, runs concurrently
 ```
 
-### Pipeline Execution with Subagents
+### Pipeline Execution with Fork
 
 ```
 # Single pipeline (Task A)
-1. architect = subagent(planner, "Plan: [Task A description]. Refine AC. Output: plan.md", effort="deep")
-2. coder = subagent(worker, "Implement [Task A] per plan. Output: code changes")
-3. review1 = subagent(reviewer-bug, "Review [Task A] code. Find bugs, edge cases", effort="deep")
+1. architect = fork(task="Plan: [Task A description]. Refine AC. Output: plan.md", effort="deep")
+2. coder = fork(task="Implement [Task A] per plan. Output: code changes", effort="balanced")
+3. review1 = fork(task="Review [Task A] code. Find bugs, edge cases", effort="deep")
 4. if review1.findings:
-     fix1 = subagent(worker, "Fix review findings: [findings]")
-     review2 = subagent(reviewer-bug, "Re-review fixes", effort="deep")
-5. qa = subagent(reviewer-test-coverage, "Write tests for [Task A]. Cover all AC items")
+     fix1 = fork(task="Fix review findings: [findings]", effort="balanced")
+     review2 = fork(task="Re-review fixes", effort="deep")
+5. qa = fork(task="Write tests for [Task A]. Cover all AC items", effort="balanced")
 6. commit = orchestrator runs git commit
 
 # Parallel pipelines (Task A + Task B)
-pipeline_a = subagent(planner, "...", effort="deep") // architect phase
-pipeline_b = subagent(planner, "...", effort="deep") // architect phase
-# Then continue each pipeline sequentially
+pipeline_a = fork(task="Plan Task A", effort="deep")  // async
+pipeline_b = fork(task="Plan Task B", effort="deep")  // async
 ```
 
 ### Parallel Pipeline Orchestration
@@ -296,19 +295,21 @@ pipeline_b = subagent(planner, "...", effort="deep") // architect phase
 For true parallelism across independent tasks:
 ```
 # Phase 1: Parallel Architecture
-arch_A = subagent(planner, "Plan Task A", effort="deep")  // async
-arch_B = subagent(planner, "Plan Task B", effort="deep")  // async
+arch_A = fork(task="Plan Task A", effort="deep")  # isolate child
+arch_B = fork(task="Plan Task B", effort="deep")  # isolate child
 
 # Phase 2: Parallel Implementation (after both plans ready)
-code_A = subagent(worker, "Implement Task A per plan")
-code_B = subagent(worker, "Implement Task B per plan")
+code_A = fork(task="Implement Task A per plan", effort="balanced")
+code_B = fork(task="Implement Task B per plan", effort="balanced")
 
 # Phase 3: Parallel Review
-review_A = subagent(reviewer-bug, "Review Task A", effort="deep")
-review_B = subagent(reviewer-bug, "Review Task B", effort="deep")
+review_A = fork(task="Review Task A", effort="deep")
+review_B = fork(task="Review Task B", effort="deep")
 
 # Continue through QA and Commit in parallel
 ```
+
+> **Note:** Deep effort (`effort="deep"`) uses a high-reasoning route but can hit output token limits with large parent session snapshots. If a deep fork returns no result, fall back to `balanced` or scope the task smaller.
 
 ## Communication Protocol
 
@@ -372,6 +373,10 @@ A task is **complete** when ALL are met:
 - [ ] QA tests pass covering all AC items
 - [ ] Orchestrator commits with descriptive message
 - [ ] Task status updated in tracking
+
+## Prerequisites
+
+This skill relies on the **`fork` tool** (pi-fork) to dispatch isolated child Pi processes for each pipeline role. The `fork` tool must be available in your pi environment. Each fork call can specify an `effort` profile (`fast`, `balanced`, `deep`) matching the task's reasoning needs.
 
 ## Usage
 
@@ -437,7 +442,9 @@ Dependency Check:
 ```yaml
 skill: swarm
 description: Orchestrate parallel pipelines with planning, code & review.
-version: 3.0
+version: 3.1
+dependencies:
+  - fork tool (pi-fork) — dispatches isolated child Pi processes for each pipeline role
 triggers:
   - "swarm"
   - "run pipeline"
