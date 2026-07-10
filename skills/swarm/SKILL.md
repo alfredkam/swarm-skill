@@ -115,9 +115,9 @@ Iteration 3: Reviewer finds K bugs → Coder fixes → Submit
   4. Update task tracking
 - **Output:** Committed changes, updated task status
 
-## Stuck Detection: Fork-Deep Hint
+## Stuck Detection: Fork-Deep Hint + Memory
 
-When the coder is stuck on a problem for **5 turns** (attempts without progress), the orchestrator forks a fresh child with `effort="deep"` to get an outside-perspective hint.
+When the coder is stuck on a problem for **5 turns** (attempts without progress), check workspace memories first, then fork-deep for a fresh hint. Once resolved, write the fix into memories so future pipelines benefit.
 
 ### What Counts as a Turn
 A "turn" is one full cycle of: coder attempts → gets feedback/error → tries again. Examples:
@@ -125,33 +125,29 @@ A "turn" is one full cycle of: coder attempts → gets feedback/error → tries 
 - Coder writes code → build fails on same line → coder adjusts → same error
 - Coder writes code → unit test fails on same assertion → coder adjusts → same failure
 
-### Fork-Deep Hint Request
-When the coder hits 5 turns on the same blocking issue, the orchestrator forks a deep-reasoning child:
-
+### Stuck Flow
 ```
-fork(task="""
-The coder is stuck on this task. Give a SHORT hint (2-4 sentences).
+1. Check workspace memories for similar past issue
+   → If found: apply known fix, skip fork-deep
 
-TASK: [Task ID] - [Description]
-SERVICE: [Service name]
-BLOCKING ISSUE: [What's been tried 5 times]
-FILES: [Relevant files]
-CODE ATTEMPT 1: [What was tried]
-CODE ATTEMPT 2: [What was tried]
-CODE ATTEMPT 3: [What was tried]
-CODE ATTEMPT 4: [What was tried]
-CODE ATTEMPT 5: [What was tried]
+2. If no memory match → fork-deep for hint:
+   fork(task="""
+   The coder is stuck on this task. Give a SHORT hint (2-4 sentences).
 
-Root cause of the block and what to try next:
-""", effort="deep")
+   TASK: [Task ID] - [Description]
+   SERVICE: [Service name]
+   BLOCKING ISSUE: [What's been tried 5 times]
+   FILES: [Relevant files]
+   Root cause and what to try next:
+   """, effort="deep")
+
+3. Pass hint to coder, apply fix
+4. Write fix into workspace memories:
+   memory_save(content="Problem: ... Root Cause: ... Fix: ...",
+               tags=["stuck", "<service>", "<issue-type>"])
+5. Reset turn counter to 0
+6. If still stuck → escalate to architect for re-planning
 ```
-
-### After Getting the Hint
-1. Orchestrator passes the hint to the coder
-2. Coder applies the hint
-3. Reset turn counter to 0
-4. Continue normal review cycle
-5. If coder is still stuck → escalate to architect for re-planning
 
 ### Turn Counter Reset
 The 5-turn counter resets to 0 when:
