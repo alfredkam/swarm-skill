@@ -1,22 +1,22 @@
 ---
 name: swarm
-description: Orchestrate parallel pipelines with planning, code & review using the fork tool (pi-fork). Each task flows through Architect → Coder → Reviewer → QA → Commit. Configurable parallel pipelines (default 4). Use when you need to coordinate multi-agent task pipelines.
+description: Orchestrate parallel pipelines with planning, code & review using roach-pi agents via subagent dispatch. Each task flows through Architect → Coder → Reviewer → QA → Commit. Configurable parallel pipelines (default 4). Use when you need to coordinate multi-agent task pipelines.
 ---
 
 # Swarm Skill
 
 ## Overview
-Orchestrate parallel pipelines with planning, code & review using the fork tool (pi-fork). Each task flows through: **Architect → Coder → Reviewer → QA → Commit**. Configurable parallel pipelines (default 4).
+Orchestrate parallel pipelines with planning, code & review using roach-pi agents via `subagent()`. Each task flows through: **Architect → Coder → Reviewer → QA → Commit**. Configurable parallel pipelines (default 4).
 
 ## Roles
 
 | Role | Agent | Responsibility |
 |------|-------|----------------|
 | **Orchestrator** | Lead (you) | Task assignment, pipeline coordination, progress tracking, final commits |
-| **Solution Architect** | planner | Implementation planning, interface design, **AC refinement**. Runs with `effort="deep"`. |
-| **Coder** | worker | Code implementation based on architect's plan |
-| **Code Reviewer** | reviewer-bug, reviewer-security, reviewer-consistency | Code review, edge cases, logic errors, pushes back to coder. Runs with `effort="deep"`. |
-| **QA Tester** | reviewer-test-coverage | Unit test implementation, coverage verification |
+| **Solution Architect** | `planner` | Implementation planning, interface design, **AC refinement**. Dispatched with `subagent({ agent: "planner", effort: "deep" })`. |
+| **Coder** | `worker` | Code implementation based on architect's plan. Dispatched with `subagent({ agent: "worker" })`. |
+| **Code Reviewer** | `qa-reviewer`, `security-reviewer` | Code review, edge cases, logic errors, security. Dispatched with `subagent({ agent: "qa-reviewer" | "security-reviewer", effort: "deep" })`. |
+| **QA Tester** | `qa-reviewer` | Unit test implementation, coverage verification. Dispatched with `subagent({ agent: "qa-reviewer" })`. |
 
 ## Task Lifecycle
 
@@ -79,8 +79,8 @@ Architect supplements:
 
 ### Phase 3: Code Review (Iterative)
 - **Input:** Coder's implementation
-- **Agent:** reviewer-bug (primary), reviewer-security, reviewer-consistency
-- **Effort:** `deep` (all review agents run with deep reasoning for thorough analysis)
+- **Agent:** `qa-reviewer` (primary), `security-reviewer` (security pass)
+- **Effort:** `deep` (review agents run with deep reasoning for thorough analysis)
 - **Process:**
   1. Reviewer analyzes code for bugs, edge cases, consistency
   2. If issues found → feedback to coder with specific fixes
@@ -98,7 +98,7 @@ Iteration 3: Reviewer finds K bugs → Coder fixes → Submit
 
 ### Phase 4: QA Testing
 - **Input:** Reviewed code, test strategy from architect
-- **Agent:** reviewer-test-coverage (QA tester)
+- **Agent:** `qa-reviewer`
 - **Process:**
   1. Implement unit tests covering all AC items
   2. Run test suite
@@ -261,33 +261,33 @@ Task IPD-14: delivery-service/fleet/availability/
 **Step 3: Launch Pipeline(s)**
 ```
 Pipeline 1 (Task A):
-  1. fork(task="Plan + AC refinement", effort="deep") → Architecture + AC Refinement
-  2. fork(task="Implementation", effort="balanced") → Implementation
-  3. fork(task="Code review", effort="deep") → Code Review
-  4. fork(task="Apply review fixes", effort="balanced") → Apply Review Fixes
-  5. fork(task="QA tests", effort="balanced") → QA Tests
+  1. subagent(agent="planner", task="Plan + AC refinement", effort="deep") → Architecture
+  2. subagent(agent="worker", task="Implementation per plan") → Code
+  3. subagent(agent="qa-reviewer", task="Code review, bug hunt", effort="deep") → Review
+  4. subagent(agent="worker", task="Apply review fixes") → Fixes
+  5. subagent(agent="qa-reviewer", task="QA tests covering all AC") → Tests
   6. Orchestrator → Final Commit
 
 Pipeline 2 (Task B) — if independent:
   Same flow, runs concurrently
 ```
 
-### Pipeline Execution with Fork
+### Pipeline Execution with Subagent
 
 ```
 # Single pipeline (Task A)
-1. architect = fork(task="Plan: [Task A description]. Refine AC. Output: plan.md", effort="deep")
-2. coder = fork(task="Implement [Task A] per plan. Output: code changes", effort="balanced")
-3. review1 = fork(task="Review [Task A] code. Find bugs, edge cases", effort="deep")
+1. architect = subagent(agent="planner", task="Plan [Task A]. Refine AC. Output plan.md", effort="deep")
+2. coder = subagent(agent="worker", task="Implement [Task A] per plan")
+3. review1 = subagent(agent="qa-reviewer", task="Review [Task A] code. Find bugs, edge cases", effort="deep")
 4. if review1.findings:
-     fix1 = fork(task="Fix review findings: [findings]", effort="balanced")
-     review2 = fork(task="Re-review fixes", effort="deep")
-5. qa = fork(task="Write tests for [Task A]. Cover all AC items", effort="balanced")
+     fix1 = subagent(agent="worker", task="Fix review findings: [findings]")
+     review2 = subagent(agent="qa-reviewer", task="Re-review fixes", effort="deep")
+5. qa = subagent(agent="qa-reviewer", task="Write tests for [Task A]. Cover all AC items")
 6. commit = orchestrator runs git commit
 
 # Parallel pipelines (Task A + Task B)
-pipeline_a = fork(task="Plan Task A", effort="deep")  // async
-pipeline_b = fork(task="Plan Task B", effort="deep")  // async
+pipeline_a = subagent(agent="planner", task="Plan Task A", effort="deep")
+pipeline_b = subagent(agent="planner", task="Plan Task B", effort="deep")
 ```
 
 ### Parallel Pipeline Orchestration
@@ -295,21 +295,21 @@ pipeline_b = fork(task="Plan Task B", effort="deep")  // async
 For true parallelism across independent tasks:
 ```
 # Phase 1: Parallel Architecture
-arch_A = fork(task="Plan Task A", effort="deep")  # isolate child
-arch_B = fork(task="Plan Task B", effort="deep")  # isolate child
+arch_A = subagent(agent="planner", task="Plan Task A", effort="deep")
+arch_B = subagent(agent="planner", task="Plan Task B", effort="deep")
 
 # Phase 2: Parallel Implementation (after both plans ready)
-code_A = fork(task="Implement Task A per plan", effort="balanced")
-code_B = fork(task="Implement Task B per plan", effort="balanced")
+code_A = subagent(agent="worker", task="Implement Task A per plan")
+code_B = subagent(agent="worker", task="Implement Task B per plan")
 
 # Phase 3: Parallel Review
-review_A = fork(task="Review Task A", effort="deep")
-review_B = fork(task="Review Task B", effort="deep")
+review_A = subagent(agent="qa-reviewer", task="Review Task A", effort="deep")
+review_B = subagent(agent="qa-reviewer", task="Review Task B", effort="deep")
 
 # Continue through QA and Commit in parallel
 ```
 
-> **Note:** Deep effort (`effort="deep"`) uses a high-reasoning route but can hit output token limits with large parent session snapshots. If a deep fork returns no result, fall back to `balanced` or scope the task smaller.
+> **Note:** `subagent()` spawns isolated child Pi processes. The roach-pi agentic-harness extension manages depth limits (default 3) and cycle prevention. Ensure roach-pi is installed before running pipelines.
 
 ## Communication Protocol
 
@@ -376,7 +376,14 @@ A task is **complete** when ALL are met:
 
 ## Prerequisites
 
-This skill relies on the **`fork` tool** (pi-fork) to dispatch isolated child Pi processes for each pipeline role. The `fork` tool must be available in your pi environment. Each fork call can specify an `effort` profile (`fast`, `balanced`, `deep`) matching the task's reasoning needs.
+This skill relies on **roach-pi's agentic-harness extension** for its agent dispatch system. Pipeline roles map to named agents defined in roach-pi's `agents/` directory:
+
+- `planner` — Implementation planning and architecture
+- `worker` — General-purpose execution with full tools
+- `qa-reviewer` — Code review, edge-case hunting, and QA verification
+- `security-reviewer` — Security-focused code review
+
+Agents are dispatched via `subagent({ agent: "<name>", task: "..." })`. Each call spawns an isolated child Pi process with the agent's specialized system prompt. The orchestrator (you) coordinates the pipeline, collects results, and drives the next phase.
 
 ## Usage
 
@@ -398,8 +405,8 @@ Orchestrator:
 3. Start Pipeline 1: IPD-13
    → Architect (planner): Plan + AC refinement
    → Coder (worker): Implement
-   → Reviewer (reviewer-bug): Review + pushback loop
-   → QA (reviewer-test-coverage): Tests
+   → Reviewer (qa-reviewer): Review + pushback loop
+   → QA (qa-reviewer): Tests
    → Commit
 4. Start Pipeline 2: IPB-1
    → Same flow, parallel execution
@@ -442,19 +449,20 @@ Dependency Check:
 ```yaml
 skill: swarm
 description: Orchestrate parallel pipelines with planning, code & review.
-version: 3.1
+version: 4.0
 dependencies:
-  - fork tool (pi-fork) — dispatches isolated child Pi processes for each pipeline role
+  - roach-pi agentic-harness — provides named agents (planner, worker, qa-reviewer, security-reviewer)
+  - subagent tool — dispatches named agents as isolated child Pi processes
 triggers:
   - "swarm"
   - "run pipeline"
   - "orchestrate tasks"
 roles:
   - orchestrator (lead)
-  - architect (planner)
-  - coder (worker)
-  - reviewer (reviewer-bug, reviewer-security, reviewer-consistency)
-  - qa-tester (reviewer-test-coverage)
+  - architect (planner agent)
+  - coder (worker agent)
+  - reviewer (qa-reviewer agent, security-reviewer agent)
+  - qa-tester (qa-reviewer agent)
 max_parallel: 4 (default, configurable)
 pipeline_phases:
   - architecture_with_ac_refinement
