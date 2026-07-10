@@ -1,10 +1,13 @@
 {
   "name": "swarm-skill",
-  "version": "3.0.0",
+  "version": "4.0.0",
   "description": "Pi skill for orchestrating parallel multi-agent pipelines (Architect → Coder → Reviewer → QA → Commit)",
   "keywords": ["pi-package", "pi-skill", "swarm", "multi-agent", "pipeline"],
   "license": "MIT",
   "pi": {
-    "skills": ["./skills"]
+    "skills": ["./skills"],
+    "requires": {
+      "roach-pi": "git:github.com/tmdgusya/roach-pi"
+    }
   }
 }

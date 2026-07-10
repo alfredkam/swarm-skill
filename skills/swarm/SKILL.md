@@ -372,7 +372,13 @@ A task is **complete** when ALL are met:
 
 ## Prerequisites
 
-This skill relies on **roach-pi's agentic-harness extension** for its agent dispatch system. Pipeline roles map to named agents defined in roach-pi's `agents/` directory:
+This skill relies on **roach-pi's agentic-harness extension** for its agent dispatch system. Install it first:
+
+```bash
+pi install git:github.com/tmdgusya/roach-pi
+```
+
+Pipeline roles map to named agents defined in roach-pi's `agents/` directory:
 
 - `planner` — Implementation planning and architecture
 - `worker` — General-purpose execution with full tools
